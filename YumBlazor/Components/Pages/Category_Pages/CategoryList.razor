@@ -1,15 +1,23 @@
 ﻿@page "/category"
 
 @inject ICategoryRepository _categoryRepository
+@inject IJSRuntime _JS
 
 <PageTitle>Categories</PageTitle>
+
+<_BsModal OnModalConfirmation="ConfirmDelete_Click"
+          Title="Delete Confirmation"
+          Text="Are you sure you want to delete this Category?"
+          ButtonBootstrapStyle="btn-danger"
+          ButtonText="Delete">
+</_BsModal>
 
 <div class="container">
 
     @if (IsProcessing)
     {
-        <div class="position-absolute w-75 h-75 d-flex flex-column align-items-center justify-content-center">
-            <img src="/Images/loading.gif" alt="Loading"/>
+        <div class="position-absolute w-75 h-75 d-flex flex-column align-items-center bg-white justify-content-center">
+            <img src="/Images/loading.gif" alt="Loading" />
         </div>
     }
     else
@@ -26,15 +34,16 @@
             <div class="card-body p-4">
                 <div class="row pb-3">
                     <div class="col-12 text-end">
-                        <button class="btn btn-lg btn-secondary" style="width:250px">Add new Category</button>
+                        <a href="/category/create" class="btn btn-lg btn-secondary" style="width:250px">
+                            <i class="bi bi-plus-square"></i> Add Category
+                        </a>
                     </div>
                 </div>
 
-                <p class="fw-bold">Categories List:</p>
-
                 @if (Categories.Any())
                 {
-                    <table class="table table-bordered table-striped">
+                    <table class="table table-bordered table-striped caption-top">
+                        <caption class="fw-bold fs-4">List of Categories</caption>
                         <thead>
                             <tr>
                                 <th>Name</th>
@@ -47,8 +56,13 @@
                                 <tr>
                                     <td>@item.Name</td>
                                     <td class="text-end">
-                                        Buttons
-                                        </td>
+                                        <a class="btn btn-outline-warning text-black fw-bold" href="@($"/category/update/{item.Id}")">
+                                            <i class="bi bi-pencil-square"></i> Edit
+                                        </a>
+                                        <button class="btn btn-outline-danger fw-bold" @onclick="() => HandleDelete(item.Id)">
+                                            <i class="bi bi-trash"></i> Del
+                                        </button>
+                                    </td>
                                 </tr>
                             }
                         </tbody>
@@ -62,23 +76,66 @@
 </div>
 
 @code {
-    private bool IsProcessing { get; set; } = false;
+    private bool IsProcessing { get; set; } = true;     // Start as false is using "OnInitializedAsync" Method
 
     private IEnumerable<Category> Categories { get; set; } = new List<Category>();
 
-    protected override async Task OnInitializedAsync()
+    private int DeleteCategoryId { get; set; } = 0;
+
+    // protected override async Task OnInitializedAsync()     // Method to use with Global Interaction
+    // {
+    //     IsProcessing = true;
+
+    //     await Task.Delay(1000); Simulating a delay for initial loading
+    //     await LoadCategories();
+    //     Thread.Sleep(2500); // Simulating a delay for loading data
+
+    //     IsProcessing = false;
+    // }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)       // Method to use with Page Interaction (Also works with Global)
+    {
+        if (firstRender)
+        {
+            await LoadCategories();
+            IsProcessing = false;
+            StateHasChanged();
+        }
+
+    }
+
+    private async Task LoadCategories()
+    {
+        Categories = await _categoryRepository.GetAllAsync();
+    }
+
+    private void HandleDelete(int id)
+    {
+        //Logic
+        DeleteCategoryId = id;
+        _JS.InvokeVoidAsync("ShowConfirmationModal");
+    }
+
+    private async Task ConfirmDelete_Click(bool isConfirmed)
     {
         IsProcessing = true;
-        await Task.Delay(2000);
 
-        LoadCategories();
+        await _JS.InvokeVoidAsync("HideConfirmationModal");
 
+        if (isConfirmed && DeleteCategoryId != 0)
+        {
+            var result = await _categoryRepository.DeleteAsync(DeleteCategoryId);
+
+            if (result)
+                _JS?.ToastrSuccess("Category deleted successfully.");
+            else
+                _JS?.ToastrError("Failed to delete category. Please try again.");
+
+            await LoadCategories();
+        }
+
+        DeleteCategoryId = 0; // Reset after confirmation
         IsProcessing = false;
-    }
 
-    private void LoadCategories()
-    {
-        Categories = _categoryRepository.GetAll();
     }
-
 }
